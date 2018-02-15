@@ -11,6 +11,7 @@ from adam.project import Projects
 from adam.timer import Timer
 from adam.rest_proxy import RestRequests
 from adam.rest_proxy import AuthorizingRestProxy
+from adam.rest_proxy import RetryingProxy
 
 import datetime
 
@@ -40,16 +41,12 @@ class Service():
         timer = Timer()
         timer.start("Setup")
         
-        rest = RestRequests(url)
+        rest = RetryingProxy(RestRequests(url))
         self.auth = Auth(rest)
             
         if not self.auth.authorize(token):
-            # Try one more time, since often the error is a session expired error and
-            # seems to work fine on the second try.
-            print("Encountered error, retrying authorization")
-            if not self.auth.authorize(token):
-                timer.stop()
-                return False
+            timer.stop()
+            return False
         
         self.rest = AuthorizingRestProxy(rest, self.auth.get_token())
         self.projects = Projects(self.rest)
