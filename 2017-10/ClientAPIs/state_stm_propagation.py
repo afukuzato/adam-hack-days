@@ -7,19 +7,22 @@
 import time
 from datetime import datetime
 from copy import deepcopy
-import numdifftools as nd
 import numpy as np
 
 # Adam related imports
 from adam import Batch
+from adam import RestRequests
+
 
 # Constants
 ISO8601Z = "%Y-%m-%dT%H:%M:%SZ"
 DECIMAL_ISO8601 = "%Y-%m-%dT%H:%M:%S.%f"
+ADAM_URL = "https://pro-equinox-162418.appspot.com/_ah/api/adam/v1"
+
 
 def batch_time_string_from_datetime(dtobj):
     """Convert a datetime object into the format required  by ADAM batch
-    
+
     Args:
         dtobj (datetime.datetime) - a datetime in UTC
 
@@ -29,6 +32,7 @@ def batch_time_string_from_datetime(dtobj):
 
     decimal_iso_Z = dtobj.strftime(DECIMAL_ISO8601) + 'Z'
     return decimal_iso_Z
+
 
 def submit_batches(batches, sleep_s=5):
     """Submit batches and wait till they are all ready
@@ -44,21 +48,19 @@ def submit_batches(batches, sleep_s=5):
     batches_count = len(batches)
     batches_ready = []
 
-    end_state_vectors = []
-
     # submit all batches
     start_timer = time.time()
     for batch in batches:
         batch.submit()
     end_timer = time.time()
     print("Submitting %i batches took %.2f seconds" %
-           (batches_count, end_timer - start_timer))
+          (batches_count, end_timer - start_timer))
 
     # check that they are ready
     # TODO: There's got to be a smarter way to check...
     start_timer = time.time()
     while len(batches_ready) < batches_count:
-        # sleep first and then check 
+        # sleep first and then check
         time.sleep(sleep_s)
         for ctr, batch in enumerate(batches):
             # Check if this is already ready
@@ -69,9 +71,10 @@ def submit_batches(batches, sleep_s=5):
                 print("Batch %i ready" % ctr)
     end_timer = time.time()
     print("Propagating %i batches took %.2f seconds after submission" %
-           (batches_count, end_timer - start_timer))
+          (batches_count, end_timer - start_timer))
 
     return True
+
 
 def propagate_states(state_vectors, epoch_time, end_time):
     """Propagate states from one time to another
@@ -79,7 +82,7 @@ def propagate_states(state_vectors, epoch_time, end_time):
     Assume state epoch is the same as integration start time
 
     Args:
-        sate_vectors (list of lists) - list of lists with 6 elements 
+        sate_vectors (list of lists) - list of lists with 6 elements
                                         [rx, ry, rz, vx, vy, vz]  [km, km/s]
         epoch_time (datetime.datetime) - epoch of state (UTC datetime)
         end_time (datetime.datetime) - time at which to end the simulation
@@ -87,26 +90,29 @@ def propagate_states(state_vectors, epoch_time, end_time):
 
     Returns:
         end_state_vectors (list of lists) - states at end of integration
-                                            [rx, ry, rz, vx, vy, vz]  [km, km/s]
+                                            [rx, ry, rz, vx, vy, vz] [km, km/s]
     """
-    
-    # Convert times to strings    
+
+    # Requests
+    rest = RestRequests(ADAM_URL)
+
+    # Convert times to strings
     epoch_time_str = batch_time_string_from_datetime(epoch_time)
     start_time_str = epoch_time_str
     end_time_str = batch_time_string_from_datetime(end_time)
     print("Propagating %i states to propagate from %s to %s" %
           (len(state_vectors), start_time_str, end_time_str))
-    
+
     # Create batches from statevectors
     batches = []
     for state_vector in state_vectors:
-        batch = Batch()
+        batch = Batch(rest)
         batch.set_state_vector(epoch_time_str, state_vector)
         batch.set_start_time(start_time_str)
         batch.set_end_time(end_time_str)
         batches.append(batch)
 
-    # submit batches and wait till they finish running   
+    # submit batches and wait till they finish running
     submit_batches(batches)
 
     # Get final states
@@ -115,6 +121,7 @@ def propagate_states(state_vectors, epoch_time, end_time):
         end_state_vectors.append(batch.get_end_state_vector())
 
     return end_state_vectors
+
 
 def evaluate_func_with_derivative(xk, func, *args):
     """Evaluate a function and do central differencing for the derivative
@@ -173,6 +180,7 @@ def evaluate_func_with_derivative(xk, func, *args):
 
     return (yk, dy_dx_matrix)
 
+
 def test_derivative_func(xyzs):
     """Function to test differntiation
     ref: https://www.mathworks.com/help/symbolic/jacobian.html
@@ -190,6 +198,7 @@ def test_derivative_func(xyzs):
         outs.append(out)
     return outs
 
+
 def main():
 
     state_vec = [130347560.13690618,
@@ -198,9 +207,9 @@ def main():
                  23.935241263310683,
                  27.146279819258538,
                  10.346605942591514]
-    
-    start_time = datetime(2017, 10, 4, 0, 0, 0 , 123456)
-    end_time = datetime(2018, 10, 4, 0, 0, 0 , 123456)
+
+    start_time = datetime(2017, 10, 4, 0, 0, 0, 123456)
+    end_time = datetime(2018, 10, 4, 0, 0, 0, 123456)
 
     end_state, stm = evaluate_func_with_derivative(
         state_vec, propagate_states, start_time, end_time
@@ -212,6 +221,7 @@ def main():
     print(stm)
 
     return 0
+
 
 if __name__ == "__main__":
     main()
