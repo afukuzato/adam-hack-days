@@ -203,7 +203,7 @@ class BatchRunManager(object):
             b.set_results(results)
         
         if self.multi_threaded:
-            threads = 5
+            threads = 15
         else:
             threads = 1
         pool = ThreadPool(threads)
