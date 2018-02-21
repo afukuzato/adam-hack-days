@@ -3,10 +3,9 @@
 """
 
 from adam.auth import Auth
-from adam.batch import Batch
-from adam.batch import Batches
-from adam.batch_runner import BatchRunner
+from adam import Batches
 from adam.group import Groups
+from adam.permission import Permissions
 from adam.project import Projects
 from adam.timer import Timer
 from adam.rest_proxy import RestRequests
@@ -42,8 +41,10 @@ class Service():
         timer.start("Setup")
         
         rest = RetryingProxy(RestRequests(url))
+        self.parent_project = parent_project
+        
         self.auth = Auth(rest)
-            
+        
         if not self.auth.authorize(token):
             timer.stop()
             return False
@@ -52,13 +53,12 @@ class Service():
         self.projects = Projects(self.rest)
         self.batches = Batches(self.rest)
         self.groups = Groups(self.rest)
+        self.permissions = Permissions(self.rest)
         
         # Also sets up a project to work in.
         self.project = self.projects.new_project(parent_project, None,
             "Test project created at " + str(datetime.datetime.now()))
         print("Set up project with uuid " + self.project.get_uuid())
-        
-        self.batch_runner = BatchRunner(self.batches, self.project)
         
         timer.stop()
         return True
@@ -81,8 +81,8 @@ class Service():
     def get_groups_module(self):
         return self.groups
     
-    def get_batch_runner(self):
-        return self.batch_runner
+    def get_permissions_module(self):
+        return self.permissions
     
     def get_rest(self):
         # Note, this is only necessary because batches are currently more than pure data
